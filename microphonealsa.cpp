@@ -6,6 +6,7 @@ using namespace WTC;
 #define PCM_DEVICE "default"
 
 static const size_t MIC_BLOCK_PCM = 160;	// recoding block size
+static const size_t MAX_BLOCKS = 32
 
 
 // ----------------------------------------------------------------------------
@@ -280,7 +281,7 @@ void CMicrophoneAlsa::StopMicThread()
 void CMicrophoneAlsa::MicThread()
 {
 	uint8_t		ucBufferA[m_Frames*2];
-	uint8_t		ucBufferB[m_Frames*2*32];
+	uint8_t		ucBufferB[m_Frames*2*MAX_BLOCKS];
 	int			rc;
 	unsigned int    ui=0;
 	bool		bFaulted = false;
@@ -322,6 +323,11 @@ void CMicrophoneAlsa::MicThread()
 			{	
 				m_pfnOnMicBufferCB(m_pvMicCBCtx, ucBufferB, ui*sizeof(ucBufferA));
 				ui=0;
+			}
+			if (ui>=MAX_BLOCKS)
+			{
+				_WTCLogMsg(LOG_ERROR, "MicThread: ui %d >= %d (MAX_BLOCKS) -- Increase MAX_BLOCKS and recompile.", ui, MAX_BLOCKS);
+				DebugBreak();
 			}
 		}
 	}
