@@ -1,19 +1,16 @@
 
 #include "microphonealsa.h"
-#include "smartbuffer.h"
 
 using namespace WTC;
 #define PCM_DEVICE "default"
 
 static const size_t MIC_BLOCK_PCM = 160;	// recoding block size
-static const size_t MAX_BLOCKS = 32
+static const size_t MAX_BLOCKS = 32;
 
 
 // ----------------------------------------------------------------------------
 CMicrophoneAlsa::CMicrophoneAlsa()
 {
-    m_tRecordingBlockSize = 0;
-
     m_bInClose = false;
     m_bIsOpen = false;
     m_pfnOnMicBufferCB = NULL;
@@ -22,6 +19,7 @@ CMicrophoneAlsa::CMicrophoneAlsa()
 	m_uiSampleRate = 8000;// (AudioCodec_PCM_Mono16bBigEndian8kHz) set in platform.h
 	m_uiChannels = 1;// 1=mono, 2=stereo
 	m_PcmHandle = NULL;
+	m_Frames = MIC_BLOCK_PCM;
 }
 
 
@@ -32,18 +30,11 @@ CMicrophoneAlsa::~CMicrophoneAlsa()
 
 
 // ----------------------------------------------------------------------------
-bool CMicrophoneAlsa::_internalOpenDevice(size_t *ptRCB, int *pBC)
+bool CMicrophoneAlsa::_internalOpenDevice()
 {
 	int err;
 	int iDir = 0;
 	uint32_t uiTmp;
-
-	if (ptRCB)
-	{
-		*ptRCB = MIC_BLOCK_PCM; // * MIC_BLOCK_MULTIPLIER_PCM);
-	}
-
-	m_Frames = *ptRCB;
 
 	// open device
 	if ( (err = snd_pcm_open(&m_PcmHandle, PCM_DEVICE, SND_PCM_STREAM_CAPTURE, 0) ) < 0 )
@@ -128,10 +119,6 @@ bool CMicrophoneAlsa::_internalOpenDevice(size_t *ptRCB, int *pBC)
 bool CMicrophoneAlsa::Create()
 {
 	m_bInClose = false;
-	if ( !_internalOpenDevice(&m_tRecordingBlockSize, NULL) ) // &m_iBufferCount) )
-	{
-		return false;
-	}
 	return true;
 }
 
@@ -143,7 +130,7 @@ bool CMicrophoneAlsa::_internalCreate()
 
 	rc = false;
 
-	if ( !_internalOpenDevice(&m_tRecordingBlockSize, NULL) ) // &m_iBufferCount) )
+	if ( !_internalOpenDevice() )
 	{
 		// TODO:(pv) Why does this sometimes fail on my HTC Touch Pro2 (WM6P)?
 		goto end_function;
@@ -166,7 +153,7 @@ end_function:
 bool CMicrophoneAlsa::Destroy()
 {
 	m_bInClose = false;
-	return _internalDestroy();
+	return true;
 }
 
 
@@ -180,7 +167,7 @@ bool CMicrophoneAlsa::_internalDestroy()
 
 	if ( m_PcmHandle )
 	{
-		while (TPSThreads::IsThread(&m_tMicThread) );
+		while (WTCThreads::IsThread(&m_tMicThread) );
 		snd_pcm_drain(m_PcmHandle);
 		snd_pcm_close(m_PcmHandle);
 		m_PcmHandle = NULL;
@@ -258,15 +245,15 @@ void CMicrophoneAlsa::SetOnFrameCallback(PFN_ON_MIC_BUFFER_CB pFn, const void *p
 // ----------------------------------------------------------------------------
 void CMicrophoneAlsa::StartMicThread()
 {
-	TPSThreads::StartThread(&m_tMicThread, "CMicrophoneWinMM::callbackThread_Helper", CMicrophoneAlsa::MicThreadHelper, this);
-	TPSThreads::SignalThreadAttention(&m_tMicThread);
+	WTCThreads::StartThread(&m_tMicThread, "CMicrophoneWinMM::callbackThread_Helper", CMicrophoneAlsa::MicThreadHelper, this);
+	WTCThreads::SignalThreadAttention(&m_tMicThread);
 }
 
 
 // ----------------------------------------------------------------------------
 void CMicrophoneAlsa::StopMicThread()
 {
-	TPSThreads::EasyStopThread(&m_tMicThread);
+	WTCThreads::EasyStopThread(&m_tMicThread);
 }
 
 
@@ -286,7 +273,7 @@ void CMicrophoneAlsa::MicThread()
 	unsigned int    ui=0;
 	bool		bFaulted = false;
 
-	while ( (TPSThreads::WaitForAttentionSignal(&m_tMicThread, 1) != TPSThreads::TPSTH_WAIT_RET_THREAD_MUST_STOP))
+	while ( (WTCThreads::WaitForAttentionSignal(&m_tMicThread, 1) != WTCThreads::WTCTH_WAIT_RET_THREAD_MUST_STOP))
 	{
 		bFaulted = false;
 		// Read audio from ALSA microphone device
@@ -327,7 +314,7 @@ void CMicrophoneAlsa::MicThread()
 			if (ui>=MAX_BLOCKS)
 			{
 				_WTCLogMsg(LOG_ERROR, "MicThread: ui %d >= %d (MAX_BLOCKS) -- Increase MAX_BLOCKS and recompile.", ui, MAX_BLOCKS);
-				DebugBreak();
+				assert(0);
 			}
 		}
 	}
